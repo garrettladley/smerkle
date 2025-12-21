@@ -7,7 +7,6 @@ import (
 	"github.com/garrettladley/smerkle/internal/object"
 )
 
-// HashError represents an error that occurred while hashing a specific path.
 type HashError struct {
 	Path string
 	Err  error

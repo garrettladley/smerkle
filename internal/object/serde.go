@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"time"
 )
 
@@ -95,7 +96,10 @@ func EncodeTree(t *Tree) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := binary.Write(&buf, binary.BigEndian, uint32(len(t.Entries))); err != nil {
+	if len(t.Entries) > math.MaxUint32 {
+		return nil, fmt.Errorf("too many tree entries: %d", len(t.Entries))
+	}
+	if err := binary.Write(&buf, binary.BigEndian, uint32(len(t.Entries))); err != nil { //nolint:gosec // bounds checked above
 		return nil, err
 	}
 
@@ -121,7 +125,10 @@ func encodeEntry(w io.Writer, e *Entry) error {
 
 	// name length + name
 	nameBytes := []byte(e.Name)
-	if err := binary.Write(w, binary.BigEndian, uint16(len(nameBytes))); err != nil {
+	if len(nameBytes) > math.MaxUint16 {
+		return fmt.Errorf("entry name too long: %d bytes", len(nameBytes))
+	}
+	if err := binary.Write(w, binary.BigEndian, uint16(len(nameBytes))); err != nil { //nolint:gosec // bounds checked above
 		return err
 	}
 	if _, err := w.Write(nameBytes); err != nil {
@@ -208,7 +215,10 @@ func EncodeIndex(idx *Index) ([]byte, error) {
 		return nil, err
 	}
 
-	if err := binary.Write(&buf, binary.BigEndian, uint32(len(idx.Entries))); err != nil {
+	if len(idx.Entries) > math.MaxUint32 {
+		return nil, fmt.Errorf("too many index entries: %d", len(idx.Entries))
+	}
+	if err := binary.Write(&buf, binary.BigEndian, uint32(len(idx.Entries))); err != nil { //nolint:gosec // bounds checked above
 		return nil, err
 	}
 
@@ -224,7 +234,10 @@ func EncodeIndex(idx *Index) ([]byte, error) {
 func encodeIndexEntry(w io.Writer, e *IndexEntry) error {
 	// path length + path
 	pathBytes := []byte(e.Path)
-	if err := binary.Write(w, binary.BigEndian, uint16(len(pathBytes))); err != nil {
+	if len(pathBytes) > math.MaxUint16 {
+		return fmt.Errorf("index entry path too long: %d bytes", len(pathBytes))
+	}
+	if err := binary.Write(w, binary.BigEndian, uint16(len(pathBytes))); err != nil { //nolint:gosec // bounds checked above
 		return err
 	}
 	if _, err := w.Write(pathBytes); err != nil {
@@ -240,7 +253,7 @@ func encodeIndexEntry(w io.Writer, e *IndexEntry) error {
 	if err := binary.Write(w, binary.BigEndian, e.ModTime.Unix()); err != nil {
 		return err
 	}
-	if err := binary.Write(w, binary.BigEndian, int32(e.ModTime.Nanosecond())); err != nil {
+	if err := binary.Write(w, binary.BigEndian, int32(e.ModTime.Nanosecond())); err != nil { //nolint:gosec // Nanosecond() returns 0-999999999, always fits in int32
 		return err
 	}
 

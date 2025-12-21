@@ -597,7 +597,7 @@ func TestLargeTree(t *testing.T) {
 	for i := range entries {
 		entries[i] = Entry{
 			Name: "file_" + string(rune('a'+i%26)) + "_" + string(rune('0'+i%10)),
-			Mode: Mode(i % 4),
+			Mode: Mode(i % 4), //nolint:gosec // i%4 is always 0-3, fits in uint8
 			Size: int64(i * 100),
 			Hash: HashBytes([]byte{byte(i)}),
 		}
