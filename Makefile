@@ -23,4 +23,14 @@ install/go:
 ## test: run tests
 .PHONY: test
 test:
-	@go test -v ./...
+	@go test -v -race ./...
+
+## fmt: format code
+.PHONY: fmt
+fmt:
+	@golangci-lint fmt
+
+## lint: run linter
+.PHONY: lint
+lint:
+	@golangci-lint run
