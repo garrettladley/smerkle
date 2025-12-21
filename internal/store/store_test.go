@@ -31,7 +31,7 @@ func TestOpen(t *testing.T) {
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
 				// create objects directory
-				if err := os.MkdirAll(filepath.Join(dir, objectsDir), 0o755); err != nil {
+				if err := os.MkdirAll(filepath.Join(dir, objectsDir), 0o750); err != nil {
 					t.Fatalf("failed to create objects dir: %v", err)
 				}
 				// create a valid index file
@@ -46,7 +46,7 @@ func TestOpen(t *testing.T) {
 				if err != nil {
 					t.Fatalf("failed to encode index: %v", err)
 				}
-				if err := os.WriteFile(filepath.Join(dir, indexFile), data, 0o644); err != nil {
+				if err := os.WriteFile(filepath.Join(dir, indexFile), data, 0o600); err != nil {
 					t.Fatalf("failed to write index: %v", err)
 				}
 				return dir
@@ -58,12 +58,12 @@ func TestOpen(t *testing.T) {
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
 				// create objects directory
-				if err := os.MkdirAll(filepath.Join(dir, objectsDir), 0o755); err != nil {
+				if err := os.MkdirAll(filepath.Join(dir, objectsDir), 0o750); err != nil {
 					t.Fatalf("failed to create objects dir: %v", err)
 				}
 				// write corrupted index file
 				corrupted := []byte("CORRUPTED DATA")
-				if err := os.WriteFile(filepath.Join(dir, indexFile), corrupted, 0o644); err != nil {
+				if err := os.WriteFile(filepath.Join(dir, indexFile), corrupted, 0o600); err != nil {
 					t.Fatalf("failed to write corrupted index: %v", err)
 				}
 				return dir
@@ -152,7 +152,7 @@ func TestObjectPath(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Open() error = %v", err)
 			}
-			defer store.Close()
+			defer store.Close() //nolint:errcheck // Close() in a test
 
 			path := store.objectPath(tt.hash)
 
@@ -186,7 +186,7 @@ func TestObjectStorage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer store.Close()
+		defer store.Close() //nolint:errcheck // Close() in a test
 
 		hash := object.HashBytes([]byte("test"))
 		data := []byte("test content")
@@ -220,7 +220,7 @@ func TestObjectStorage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer store.Close()
+		defer store.Close() //nolint:errcheck // Close() in a test
 
 		hash := object.HashBytes([]byte("test"))
 		data := []byte("test content")
@@ -228,7 +228,7 @@ func TestObjectStorage(t *testing.T) {
 		// delete the shard directory if it exists to test creation
 		hex := hash.String()
 		shardDir := filepath.Join(dir, objectsDir, hex[:2])
-		os.RemoveAll(shardDir)
+		_ = os.RemoveAll(shardDir)
 
 		if err := store.PutObject(hash, data); err != nil {
 			t.Fatalf("PutObject() error = %v", err)
@@ -252,7 +252,7 @@ func TestObjectStorage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer store.Close()
+		defer store.Close() //nolint:errcheck // Close() in a test
 
 		hash := object.HashBytes([]byte("test"))
 		expected := []byte("test content")
@@ -279,7 +279,7 @@ func TestObjectStorage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer store.Close()
+		defer store.Close() //nolint:errcheck // Close() in a test
 
 		// use a hash that doesn't exist
 		hash := object.HashBytes([]byte("nonexistent"))
@@ -301,7 +301,7 @@ func TestObjectStorage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer store.Close()
+		defer store.Close() //nolint:errcheck // Close() in a test
 
 		existingHash := object.HashBytes([]byte("exists"))
 		missingHash := object.HashBytes([]byte("missing"))
@@ -360,7 +360,7 @@ func TestObjectStorage(t *testing.T) {
 				if err != nil {
 					t.Fatalf("Open() error = %v", err)
 				}
-				defer store.Close()
+				defer store.Close() //nolint:errcheck // Close() in a test
 
 				hash := object.HashBytes(tt.content)
 
@@ -421,7 +421,7 @@ func TestBlobStorage(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Open() error = %v", err)
 			}
-			defer s.Close()
+			defer s.Close() //nolint:errcheck // Close() in a test
 
 			blob := &object.Blob{Content: tt.content}
 
@@ -476,7 +476,7 @@ func TestBlobStorage(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck // Close() in a test
 
 		// create a hash that doesn't exist
 		missingHash := object.HashBytes([]byte("nonexistent"))
@@ -557,7 +557,7 @@ func TestTreeStorage(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Open() error = %v", err)
 			}
-			defer s.Close()
+			defer s.Close() //nolint:errcheck // Close() in a test
 
 			tree := &object.Tree{Entries: tt.entries}
 
@@ -627,7 +627,7 @@ func TestConcurrency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck // Close() in a test
 
 		const numGoroutines = 50
 		const updatesPerGoroutine = 100
@@ -677,7 +677,7 @@ func TestConcurrency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck // Close() in a test
 
 		// populate cache with test data
 		now := time.Now().Truncate(time.Nanosecond)
@@ -731,7 +731,7 @@ func TestConcurrency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck // Close() in a test
 
 		const numGoroutines = 30
 		const operationsPerGoroutine = 100
@@ -785,7 +785,7 @@ func TestConcurrency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck // Close() in a test
 
 		const numGoroutines = 20
 		const blobsPerGoroutine = 10
@@ -839,7 +839,7 @@ func TestConcurrency(t *testing.T) {
 		// count total object files created
 		objectCount := 0
 		objectsRoot := filepath.Join(tmpDir, objectsDir)
-		filepath.Walk(objectsRoot, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(objectsRoot, func(path string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() {
 				objectCount++
 			}
@@ -859,7 +859,7 @@ func TestConcurrency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck // Close() in a test
 
 		const numGoroutines = 20
 		const blobsPerGoroutine = 5
@@ -919,7 +919,7 @@ func TestConcurrency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck // Close() in a test
 
 		// pre-populate with some blobs
 		preloadedHashes := make([]object.Hash, 10)
@@ -997,7 +997,7 @@ func TestConcurrency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck // Close() in a test
 
 		const numUpdaters = 10
 		const numFlushers = 5
@@ -1068,7 +1068,7 @@ func TestConcurrency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck // Close() in a test
 
 		// populate with some data
 		now := time.Now().Truncate(time.Nanosecond)
@@ -1078,7 +1078,7 @@ func TestConcurrency(t *testing.T) {
 			s.UpdateCache(path, int64(i), now, hash)
 
 			blob := &object.Blob{Content: []byte{byte(i)}}
-			s.PutBlob(blob)
+			_, _ = s.PutBlob(blob)
 		}
 
 		const numGoroutines = 20
@@ -1114,7 +1114,7 @@ func TestConcurrency(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open() error = %v", err)
 		}
-		defer s.Close()
+		defer s.Close() //nolint:errcheck // Close() in a test
 
 		const numGoroutines = 40
 		const operationsPerGoroutine = 25
@@ -1143,11 +1143,11 @@ func TestConcurrency(t *testing.T) {
 						// putBlob
 						content := []byte{byte(id), byte(j), byte(id ^ j)}
 						blob := &object.Blob{Content: content}
-						s.PutBlob(blob)
+						_, _ = s.PutBlob(blob)
 					case 3:
 						// getBlob (try to get something that might exist)
 						hash := object.HashBytes([]byte{byte(id), byte(j), byte(id ^ j)})
-						s.GetBlob(hash) // ignore error, might not exist
+						_, _ = s.GetBlob(hash)
 					case 4:
 						// stats
 						s.Stats()

@@ -29,7 +29,7 @@ func Open(root string) (*Store, error) {
 		index: make(map[string]object.IndexEntry),
 	}
 
-	if err := os.MkdirAll(filepath.Join(root, objectsDir), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, objectsDir), 0o750); err != nil {
 		return nil, err
 	}
 
@@ -79,7 +79,7 @@ func (s *Store) Flush() error {
 		return err
 	}
 
-	if err := os.WriteFile(filepath.Join(s.root, indexFile), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(s.root, indexFile), data, 0o600); err != nil {
 		return err
 	}
 
@@ -135,7 +135,7 @@ func (s *Store) PutObject(h object.Hash, data []byte) error {
 	path := s.objectPath(h)
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 
@@ -150,11 +150,11 @@ func (s *Store) PutObject(h object.Hash, data []byte) error {
 	closeErr := f.Close()
 
 	if writeErr != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return writeErr
 	}
 	if closeErr != nil {
-		os.Remove(tmp)
+		_ = os.Remove(tmp)
 		return closeErr
 	}
 
@@ -233,7 +233,7 @@ func (s *Store) Stats() Stats {
 
 	objectCount := 0
 	objectsRoot := filepath.Join(s.root, objectsDir)
-	filepath.Walk(objectsRoot, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(objectsRoot, func(path string, info os.FileInfo, err error) error {
 		if err == nil && !info.IsDir() {
 			objectCount++
 		}
