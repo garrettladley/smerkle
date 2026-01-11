@@ -48,8 +48,5 @@ jobs:
       - name: make install
         run: make install
 
-      - name: Run Tests with Coverage
-        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-
-      - name: Print Coverage
-        run: go tool cover -func=coverage.txt
+      - name: Test
+        run: go test -v -json -race -coverpkg=./... -covermode=atomic -coverprofile=coverage.txt ./... -timeout 5m

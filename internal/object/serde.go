@@ -26,7 +26,10 @@ func WriteHeader(w io.Writer, magic string) error {
 	var h Header
 	copy(h.Magic[:], magic)
 	h.Version = CurrentVersion
-	return binary.Write(w, binary.BigEndian, h)
+	if err := binary.Write(w, binary.BigEndian, h); err != nil {
+		return fmt.Errorf("write header: %w", err)
+	}
+	return nil
 }
 
 func ReadHeader(r io.Reader, expectedMagic string) (uint16, error) {
@@ -53,7 +56,7 @@ func EncodeBlob(b *Blob) ([]byte, error) {
 	}
 
 	if err := binary.Write(&buf, binary.BigEndian, uint64(len(b.Content))); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("write content length: %w", err)
 	}
 	buf.Write(b.Content)
 
@@ -100,7 +103,7 @@ func EncodeTree(t *Tree) ([]byte, error) {
 		return nil, fmt.Errorf("too many tree entries: %d", len(t.Entries))
 	}
 	if err := binary.Write(&buf, binary.BigEndian, uint32(len(t.Entries))); err != nil { //nolint:gosec // bounds checked above
-		return nil, err
+		return nil, fmt.Errorf("write entry count: %w", err)
 	}
 
 	for _, e := range t.Entries {
@@ -115,12 +118,12 @@ func EncodeTree(t *Tree) ([]byte, error) {
 func encodeEntry(w io.Writer, e *Entry) error {
 	// mode (1 byte)
 	if err := binary.Write(w, binary.BigEndian, e.Mode); err != nil {
-		return err
+		return fmt.Errorf("write mode: %w", err)
 	}
 
 	// size (8 bytes)
 	if err := binary.Write(w, binary.BigEndian, e.Size); err != nil {
-		return err
+		return fmt.Errorf("write size: %w", err)
 	}
 
 	// name length + name
@@ -129,15 +132,15 @@ func encodeEntry(w io.Writer, e *Entry) error {
 		return fmt.Errorf("entry name too long: %d bytes", len(nameBytes))
 	}
 	if err := binary.Write(w, binary.BigEndian, uint16(len(nameBytes))); err != nil { //nolint:gosec // bounds checked above
-		return err
+		return fmt.Errorf("write name length: %w", err)
 	}
 	if _, err := w.Write(nameBytes); err != nil {
-		return err
+		return fmt.Errorf("write name: %w", err)
 	}
 
 	// hash (32 bytes)
 	if _, err := w.Write(e.Hash[:]); err != nil {
-		return err
+		return fmt.Errorf("write hash: %w", err)
 	}
 
 	return nil
@@ -178,28 +181,28 @@ func decodeTreeV1(r io.Reader) (*Tree, error) {
 func decodeEntryV1(r io.Reader, e *Entry) error {
 	// mode
 	if err := binary.Read(r, binary.BigEndian, &e.Mode); err != nil {
-		return err
+		return fmt.Errorf("read mode: %w", err)
 	}
 
 	// size
 	if err := binary.Read(r, binary.BigEndian, &e.Size); err != nil {
-		return err
+		return fmt.Errorf("read size: %w", err)
 	}
 
 	// name
 	var nameLen uint16
 	if err := binary.Read(r, binary.BigEndian, &nameLen); err != nil {
-		return err
+		return fmt.Errorf("read name length: %w", err)
 	}
 	nameBytes := make([]byte, nameLen)
 	if _, err := io.ReadFull(r, nameBytes); err != nil {
-		return err
+		return fmt.Errorf("read name: %w", err)
 	}
 	e.Name = string(nameBytes)
 
 	// hash
 	if _, err := io.ReadFull(r, e.Hash[:]); err != nil {
-		return err
+		return fmt.Errorf("read hash: %w", err)
 	}
 
 	return nil
@@ -219,7 +222,7 @@ func EncodeIndex(idx *Index) ([]byte, error) {
 		return nil, fmt.Errorf("too many index entries: %d", len(idx.Entries))
 	}
 	if err := binary.Write(&buf, binary.BigEndian, uint32(len(idx.Entries))); err != nil { //nolint:gosec // bounds checked above
-		return nil, err
+		return nil, fmt.Errorf("write entry count: %w", err)
 	}
 
 	for _, e := range idx.Entries {
@@ -238,28 +241,28 @@ func encodeIndexEntry(w io.Writer, e *IndexEntry) error {
 		return fmt.Errorf("index entry path too long: %d bytes", len(pathBytes))
 	}
 	if err := binary.Write(w, binary.BigEndian, uint16(len(pathBytes))); err != nil { //nolint:gosec // bounds checked above
-		return err
+		return fmt.Errorf("write path length: %w", err)
 	}
 	if _, err := w.Write(pathBytes); err != nil {
-		return err
+		return fmt.Errorf("write path: %w", err)
 	}
 
 	// size
 	if err := binary.Write(w, binary.BigEndian, e.Size); err != nil {
-		return err
+		return fmt.Errorf("write size: %w", err)
 	}
 
 	// modTime as seconds + nanoseconds
 	if err := binary.Write(w, binary.BigEndian, e.ModTime.Unix()); err != nil {
-		return err
+		return fmt.Errorf("write modtime seconds: %w", err)
 	}
 	if err := binary.Write(w, binary.BigEndian, int32(e.ModTime.Nanosecond())); err != nil { //nolint:gosec // Nanosecond() returns 0-999999999, always fits in int32
-		return err
+		return fmt.Errorf("write modtime nanoseconds: %w", err)
 	}
 
 	// hash
 	if _, err := w.Write(e.Hash[:]); err != nil {
-		return err
+		return fmt.Errorf("write hash: %w", err)
 	}
 
 	return nil
@@ -301,33 +304,33 @@ func decodeIndexEntryV1(r io.Reader, e *IndexEntry) error {
 	// path
 	var pathLen uint16
 	if err := binary.Read(r, binary.BigEndian, &pathLen); err != nil {
-		return err
+		return fmt.Errorf("read path length: %w", err)
 	}
 	pathBytes := make([]byte, pathLen)
 	if _, err := io.ReadFull(r, pathBytes); err != nil {
-		return err
+		return fmt.Errorf("read path: %w", err)
 	}
 	e.Path = string(pathBytes)
 
 	// size
 	if err := binary.Read(r, binary.BigEndian, &e.Size); err != nil {
-		return err
+		return fmt.Errorf("read size: %w", err)
 	}
 
 	// modTime as seconds + nanoseconds
 	var secs int64
 	if err := binary.Read(r, binary.BigEndian, &secs); err != nil {
-		return err
+		return fmt.Errorf("read modtime seconds: %w", err)
 	}
 	var nsec int32
 	if err := binary.Read(r, binary.BigEndian, &nsec); err != nil {
-		return err
+		return fmt.Errorf("read modtime nanoseconds: %w", err)
 	}
 	e.ModTime = time.Unix(secs, int64(nsec))
 
 	// hash
 	if _, err := io.ReadFull(r, e.Hash[:]); err != nil {
-		return err
+		return fmt.Errorf("read hash: %w", err)
 	}
 
 	return nil

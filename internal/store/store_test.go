@@ -1022,8 +1022,8 @@ func TestConcurrency(t *testing.T) {
 		}
 
 		// flusher goroutines
-		for i := 0; i < numFlushers; i++ {
-			go func(id int) {
+		for range numFlushers {
+			go func() {
 				defer wg.Done()
 				for j := 0; j < operationsPerGoroutine; j++ {
 					if err := s.Flush(); err != nil {
@@ -1032,7 +1032,7 @@ func TestConcurrency(t *testing.T) {
 					// small sleep to allow updates to happen
 					time.Sleep(time.Microsecond)
 				}
-			}(i)
+			}()
 		}
 
 		// reader goroutines
