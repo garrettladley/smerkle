@@ -128,7 +128,7 @@ func (w *walker) walkDir(ctx context.Context, absDir, relDir string) (object.Has
 		relPath string
 		absPath string
 	}
-	var workItems []workItem
+	workItems := make([]workItem, 0, len(dirEntries))
 	for _, de := range dirEntries {
 		name := de.Name()
 		if name == smerkleignoreFile {
@@ -249,7 +249,7 @@ func (w *walker) hashFile(ctx context.Context, absPath, relPath string, info os.
 	// acquire semaphore to limit concurrent file I/O
 	select {
 	case <-ctx.Done():
-		return object.Entry{}, ctx.Err()
+		return object.Entry{}, fmt.Errorf("context: %w", ctx.Err())
 	case w.sem <- struct{}{}:
 		defer func() { <-w.sem }()
 	}
