@@ -1,10 +1,8 @@
-package merkle
+package xerrors
 
 import (
 	"fmt"
 	"strings"
-
-	"github.com/garrettladley/smerkle/internal/object"
 )
 
 type HashError struct {
@@ -18,22 +16,6 @@ func (e HashError) Error() string {
 
 func (e HashError) Unwrap() error {
 	return e.Err
-}
-
-type Result struct {
-	Hash   object.Hash
-	Errors []HashError
-}
-
-func (r *Result) Ok() bool {
-	return len(r.Errors) == 0
-}
-
-func (r *Result) Err() error {
-	if r.Ok() {
-		return nil
-	}
-	return &MultiError{Errors: r.Errors}
 }
 
 type MultiError struct {

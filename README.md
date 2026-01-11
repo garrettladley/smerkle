@@ -13,5 +13,5 @@ A weekend project exploring Merkle trees in Go.
 ## TODO
 
 - [x] `.smerkleignore` - gitignore-style pattern matching for excluding files
-- [ ] Directory walker - recursively walk a directory to build the tree
+- [x] Directory walker - recursively walk a directory to build the tree
 - [ ] Tree diffing - compare two trees and output changes (added/modified/deleted)
