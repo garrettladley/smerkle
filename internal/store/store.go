@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -30,7 +31,7 @@ func Open(root string) (*Store, error) {
 	}
 
 	if err := os.MkdirAll(filepath.Join(root, objectsDir), 0o750); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create objects directory: %w", err)
 	}
 
 	if err := s.loadIndex(); err != nil && !os.IsNotExist(err) {
@@ -43,12 +44,12 @@ func Open(root string) (*Store, error) {
 func (s *Store) loadIndex() error {
 	data, err := os.ReadFile(filepath.Join(s.root, indexFile))
 	if err != nil {
-		return err
+		return err //nolint:wrapcheck // caller checks os.IsNotExist
 	}
 
 	idx, err := object.DecodeIndex(data)
 	if err != nil {
-		return err
+		return fmt.Errorf("decode index: %w", err)
 	}
 
 	s.indexMu.Lock()
@@ -76,11 +77,11 @@ func (s *Store) Flush() error {
 
 	data, err := object.EncodeIndex(&object.Index{Entries: entries})
 	if err != nil {
-		return err
+		return fmt.Errorf("encode index: %w", err)
 	}
 
 	if err := os.WriteFile(filepath.Join(s.root, indexFile), data, 0o600); err != nil {
-		return err
+		return fmt.Errorf("write index file: %w", err)
 	}
 
 	s.dirty = false
@@ -136,13 +137,13 @@ func (s *Store) PutObject(h object.Hash, data []byte) error {
 
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return err
+		return fmt.Errorf("create object directory: %w", err)
 	}
 
 	// write atomically via unique temp file to avoid races
 	f, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
-		return err
+		return fmt.Errorf("create temp file: %w", err)
 	}
 	tmp := f.Name()
 
@@ -151,18 +152,21 @@ func (s *Store) PutObject(h object.Hash, data []byte) error {
 
 	if writeErr != nil {
 		_ = os.Remove(tmp)
-		return writeErr
+		return fmt.Errorf("write object data: %w", writeErr)
 	}
 	if closeErr != nil {
 		_ = os.Remove(tmp)
-		return closeErr
+		return fmt.Errorf("close temp file: %w", closeErr)
 	}
 
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return fmt.Errorf("rename temp file: %w", err)
+	}
+	return nil
 }
 
 func (s *Store) GetObject(h object.Hash) ([]byte, error) {
-	return os.ReadFile(s.objectPath(h))
+	return os.ReadFile(s.objectPath(h)) //nolint:wrapcheck // callers use os.IsNotExist
 }
 
 func (s *Store) PutBlob(b *object.Blob) (object.Hash, error) {
@@ -174,7 +178,7 @@ func (s *Store) PutBlob(b *object.Blob) (object.Hash, error) {
 
 	data, err := object.EncodeBlob(b)
 	if err != nil {
-		return object.ZeroHash, err
+		return object.ZeroHash, fmt.Errorf("encode blob: %w", err)
 	}
 
 	if err := s.PutObject(h, data); err != nil {
@@ -190,13 +194,17 @@ func (s *Store) GetBlob(h object.Hash) (*object.Blob, error) {
 		return nil, err
 	}
 
-	return object.DecodeBlob(data)
+	blob, err := object.DecodeBlob(data)
+	if err != nil {
+		return nil, fmt.Errorf("decode blob: %w", err)
+	}
+	return blob, nil
 }
 
 func (s *Store) PutTree(t *object.Tree) (object.Hash, error) {
 	data, err := object.EncodeTree(t)
 	if err != nil {
-		return object.ZeroHash, err
+		return object.ZeroHash, fmt.Errorf("encode tree: %w", err)
 	}
 
 	h := object.HashBytes(data)
@@ -218,7 +226,11 @@ func (s *Store) GetTree(h object.Hash) (*object.Tree, error) {
 		return nil, err
 	}
 
-	return object.DecodeTree(data)
+	tree, err := object.DecodeTree(data)
+	if err != nil {
+		return nil, fmt.Errorf("decode tree: %w", err)
+	}
+	return tree, nil
 }
 
 type Stats struct {
