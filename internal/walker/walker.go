@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
+	"sync"
 
 	"github.com/garrettladley/smerkle/internal/ignore"
 	"github.com/garrettladley/smerkle/internal/object"
@@ -22,25 +24,40 @@ var (
 
 const smerkleignoreFile = ".smerkleignore"
 
-type Walker struct {
-	root    string
-	store   *store.Store
-	ignorer *ignore.Ignorer
-	ec      *xerrors.ErrorCollector
+// entryResult holds the result of processing a single directory entry.
+type entryResult struct {
+	entry *object.Entry
+	err   error
 }
 
-type Option func(*Walker)
+type walker struct {
+	root       string
+	store      *store.Store
+	ignorer    *ignore.Ignorer
+	ec         *xerrors.ErrorCollector
+	sem        chan struct{}
+	maxWorkers int
+}
+
+type Option func(*walker)
 
 func WithIgnorer(ign *ignore.Ignorer) Option {
-	return func(w *Walker) {
+	return func(w *walker) {
 		w.ignorer = ign
+	}
+}
+
+// if n <= 0, defaults to runtime.NumCPU().
+func WithConcurrency(n int) Option {
+	return func(w *walker) {
+		w.maxWorkers = n
 	}
 }
 
 // walk recursively traverses root, building a Merkle tree.
 // loads .smerkleignore from root if present.
 func Walk(ctx context.Context, root string, s *store.Store, opts ...Option) (*result.Result, error) {
-	w := &Walker{
+	w := &walker{
 		root:  root,
 		store: s,
 	}
@@ -71,12 +88,18 @@ func Walk(ctx context.Context, root string, s *store.Store, opts ...Option) (*re
 		w.ignorer = ign
 	}
 
+	workers := w.maxWorkers
+	if workers <= 0 {
+		workers = runtime.NumCPU()
+	}
+	w.sem = make(chan struct{}, workers)
+
 	w.ec = xerrors.NewErrorCollector()
 
 	return w.walk(ctx)
 }
 
-func (w *Walker) walk(ctx context.Context) (*result.Result, error) {
+func (w *walker) walk(ctx context.Context) (*result.Result, error) {
 	hash, err := w.walkDir(ctx, w.root, "")
 	if err != nil {
 		return nil, err
@@ -89,7 +112,7 @@ func (w *Walker) walk(ctx context.Context) (*result.Result, error) {
 }
 
 // walkDir walks a single directory recursively and returns its tree hash.
-func (w *Walker) walkDir(ctx context.Context, absDir, relDir string) (object.Hash, error) {
+func (w *walker) walkDir(ctx context.Context, absDir, relDir string) (object.Hash, error) {
 	if err := ctx.Err(); err != nil {
 		return object.ZeroHash, fmt.Errorf("context: %w", err)
 	}
@@ -99,27 +122,59 @@ func (w *Walker) walkDir(ctx context.Context, absDir, relDir string) (object.Has
 		return object.ZeroHash, fmt.Errorf("read dir: %w", err)
 	}
 
-	var entries []object.Entry
+	// build work items, filtering out .smerkleignore
+	type workItem struct {
+		name    string
+		relPath string
+		absPath string
+	}
+	var workItems []workItem
 	for _, de := range dirEntries {
 		name := de.Name()
-
-		// skip .smerkleignore file itself
 		if name == smerkleignoreFile {
 			continue
 		}
-
 		relPath := name
 		if relDir != "" {
 			relPath = filepath.Join(relDir, name)
 		}
 		absPath := filepath.Join(absDir, name)
+		workItems = append(workItems, workItem{name: name, relPath: relPath, absPath: absPath})
+	}
 
-		entry, err := w.processEntry(ctx, absPath, relPath, name)
-		if err != nil {
-			return object.ZeroHash, err
+	// process entries concurrently
+	results := make([]entryResult, len(workItems))
+	var wg sync.WaitGroup
+
+	for i, item := range workItems {
+		wg.Add(1)
+		go func(idx int, wi workItem) {
+			defer wg.Done()
+
+			// check context before processing
+			if err := ctx.Err(); err != nil {
+				results[idx] = entryResult{err: err}
+				return
+			}
+
+			entry, err := w.processEntry(ctx, wi.absPath, wi.relPath, wi.name)
+			results[idx] = entryResult{entry: entry, err: err}
+		}(i, item)
+	}
+
+	wg.Wait()
+
+	// collect entries and check for context errors
+	var entries []object.Entry
+	for _, r := range results {
+		if r.err != nil {
+			if errors.Is(r.err, context.Canceled) || errors.Is(r.err, context.DeadlineExceeded) {
+				return object.ZeroHash, r.err
+			}
+			// other errors already collected via ErrorCollector
 		}
-		if entry != nil {
-			entries = append(entries, *entry)
+		if r.entry != nil {
+			entries = append(entries, *r.entry)
 		}
 	}
 
@@ -138,7 +193,7 @@ func (w *Walker) walkDir(ctx context.Context, absDir, relDir string) (object.Has
 
 // processEntry processes a single directory entry and returns the corresponding tree entry.
 // returns nil entry if the entry should be skipped (ignored or error collected).
-func (w *Walker) processEntry(ctx context.Context, absPath, relPath, name string) (*object.Entry, error) {
+func (w *walker) processEntry(ctx context.Context, absPath, relPath, name string) (*object.Entry, error) {
 	info, err := os.Lstat(absPath)
 	if err != nil {
 		w.ec.Add(relPath, err)
@@ -158,7 +213,7 @@ func (w *Walker) processEntry(ctx context.Context, absPath, relPath, name string
 }
 
 // processDirEntry processes a directory entry.
-func (w *Walker) processDirEntry(ctx context.Context, absPath, relPath, name string, info os.FileInfo) (*object.Entry, error) {
+func (w *walker) processDirEntry(ctx context.Context, absPath, relPath, name string, info os.FileInfo) (*object.Entry, error) {
 	hash, err := w.walkDir(ctx, absPath, relPath)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -177,7 +232,7 @@ func (w *Walker) processDirEntry(ctx context.Context, absPath, relPath, name str
 }
 
 // processFileEntry processes a file or symlink entry.
-func (w *Walker) processFileEntry(ctx context.Context, absPath, relPath string, info os.FileInfo) (*object.Entry, error) {
+func (w *walker) processFileEntry(ctx context.Context, absPath, relPath string, info os.FileInfo) (*object.Entry, error) {
 	entry, err := w.hashFile(ctx, absPath, relPath, info)
 	if err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -190,7 +245,15 @@ func (w *Walker) processFileEntry(ctx context.Context, absPath, relPath string, 
 }
 
 // hashFile hashes a single file and returns its entry.
-func (w *Walker) hashFile(ctx context.Context, absPath, relPath string, info os.FileInfo) (object.Entry, error) {
+func (w *walker) hashFile(ctx context.Context, absPath, relPath string, info os.FileInfo) (object.Entry, error) {
+	// acquire semaphore to limit concurrent file I/O
+	select {
+	case <-ctx.Done():
+		return object.Entry{}, ctx.Err()
+	case w.sem <- struct{}{}:
+		defer func() { <-w.sem }()
+	}
+
 	if err := ctx.Err(); err != nil {
 		return object.Entry{}, fmt.Errorf("context: %w", err)
 	}
