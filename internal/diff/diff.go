@@ -178,43 +178,60 @@ func diffTrees(s *store.Store, oldHash, newHash object.Hash, prefix string, opts
 			newIdx++
 
 		default:
-			fullPath := joinPath(prefix, oldEntry.Name)
-			oldIsDir := oldEntry.Mode == object.ModeDirectory
-			newIsDir := newEntry.Mode == object.ModeDirectory
-
-			if oldIsDir != newIsDir {
-				result.Changes = append(result.Changes, Change{
-					Type:     ChangeTypeChange,
-					Path:     fullPath,
-					OldEntry: oldEntry,
-					NewEntry: newEntry,
-				})
-				if opts.Recursive && oldIsDir {
-					if err := addAllEntries(s, oldEntry.Hash, fullPath, ChangeDeleted, result); err != nil {
-						return err
-					}
-				}
-				if opts.Recursive && newIsDir {
-					if err := addAllEntries(s, newEntry.Hash, fullPath, ChangeAdded, result); err != nil {
-						return err
-					}
-				}
-			} else if oldEntry.Hash != newEntry.Hash {
-				if oldIsDir && opts.Recursive {
-					if err := diffTrees(s, oldEntry.Hash, newEntry.Hash, fullPath, opts, result); err != nil {
-						return err
-					}
-				} else {
-					result.Changes = append(result.Changes, Change{
-						Type:     ChangeModified,
-						Path:     fullPath,
-						OldEntry: oldEntry,
-						NewEntry: newEntry,
-					})
-				}
+			if err := diffEntry(s, oldEntry, newEntry, prefix, opts, result); err != nil {
+				return err
 			}
 			oldIdx++
 			newIdx++
+		}
+	}
+
+	return nil
+}
+
+func diffEntry(s *store.Store, oldEntry, newEntry *object.Entry, prefix string, opts Options, result *Result) error {
+	fullPath := joinPath(prefix, oldEntry.Name)
+	oldIsDir := oldEntry.Mode == object.ModeDirectory
+	newIsDir := newEntry.Mode == object.ModeDirectory
+
+	if oldIsDir != newIsDir {
+		return handleTypeChange(s, oldEntry, newEntry, fullPath, oldIsDir, newIsDir, opts, result)
+	}
+
+	if oldEntry.Hash == newEntry.Hash {
+		return nil
+	}
+
+	if oldIsDir && opts.Recursive {
+		return diffTrees(s, oldEntry.Hash, newEntry.Hash, fullPath, opts, result)
+	}
+
+	result.Changes = append(result.Changes, Change{
+		Type:     ChangeModified,
+		Path:     fullPath,
+		OldEntry: oldEntry,
+		NewEntry: newEntry,
+	})
+	return nil
+}
+
+func handleTypeChange(s *store.Store, oldEntry, newEntry *object.Entry, fullPath string, oldIsDir, newIsDir bool, opts Options, result *Result) error {
+	result.Changes = append(result.Changes, Change{
+		Type:     ChangeTypeChange,
+		Path:     fullPath,
+		OldEntry: oldEntry,
+		NewEntry: newEntry,
+	})
+
+	if opts.Recursive && oldIsDir {
+		if err := addAllEntries(s, oldEntry.Hash, fullPath, ChangeDeleted, result); err != nil {
+			return err
+		}
+	}
+
+	if opts.Recursive && newIsDir {
+		if err := addAllEntries(s, newEntry.Hash, fullPath, ChangeAdded, result); err != nil {
+			return err
 		}
 	}
 
@@ -225,7 +242,11 @@ func loadTree(s *store.Store, hash object.Hash) (*object.Tree, error) {
 	if hash.IsZero() {
 		return &object.Tree{Entries: []object.Entry{}}, nil
 	}
-	return s.GetTree(hash)
+	tree, err := s.GetTree(hash)
+	if err != nil {
+		return nil, fmt.Errorf("get tree %s: %w", hash, err)
+	}
+	return tree, nil
 }
 
 func addAllEntries(s *store.Store, hash object.Hash, prefix string, changeType ChangeType, result *Result) error {

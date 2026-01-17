@@ -55,7 +55,7 @@ func TestDiffEmptyToNonEmpty(t *testing.T) {
 		t.Fatalf("len(Added()) = %d, want 2", len(added))
 	}
 
-	if added[0].Path != "a.txt" || added[1].Path != "b.txt" {
+	if added[0].Path != "a.txt" || added[1].Path != "b.txt" { //nolint:goconst // test data
 		t.Errorf("Added paths = [%q, %q], want [a.txt, b.txt]", added[0].Path, added[1].Path)
 	}
 
