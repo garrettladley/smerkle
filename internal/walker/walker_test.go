@@ -464,6 +464,65 @@ func TestWalkIgnorePatterns(t *testing.T) {
 			t.Error("debug.log should be ignored")
 		}
 	})
+
+	t.Run(".smerkle directory is implicitly ignored", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, "keep.txt"), "keep")
+		writeFile(t, filepath.Join(root, ".smerkle", "objects", "ab", "cdef"), "object data")
+		writeFile(t, filepath.Join(root, ".smerkle", "index"), "index data")
+		s := setupStore(t)
+
+		result, err := Walk(context.Background(), root, s)
+		if err != nil {
+			t.Fatalf("Walk() error = %v", err)
+		}
+
+		tree, err := s.GetTree(result.Hash)
+		if err != nil {
+			t.Fatalf("GetTree() error = %v", err)
+		}
+
+		for _, e := range tree.Entries {
+			if e.Name == ".smerkle" {
+				t.Error(".smerkle directory should be implicitly ignored")
+			}
+		}
+
+		if len(tree.Entries) != 1 {
+			t.Errorf("tree has %d entries, want 1 (only keep.txt)", len(tree.Entries))
+		}
+	})
+
+	t.Run("implicit ignores work without .smerkleignore file", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		writeFile(t, filepath.Join(root, "file.txt"), "content")
+		writeFile(t, filepath.Join(root, ".smerkle", "data"), "store data")
+		// no .smerkleignore file
+		s := setupStore(t)
+
+		result, err := Walk(context.Background(), root, s)
+		if err != nil {
+			t.Fatalf("Walk() error = %v", err)
+		}
+
+		tree, err := s.GetTree(result.Hash)
+		if err != nil {
+			t.Fatalf("GetTree() error = %v", err)
+		}
+
+		for _, e := range tree.Entries {
+			if e.Name == ".smerkle" {
+				t.Error(".smerkle should be implicitly ignored even without .smerkleignore")
+			}
+			if e.Name == ".smerkleignore" {
+				t.Error(".smerkleignore should be implicitly ignored")
+			}
+		}
+	})
 }
 
 func TestWalkCache(t *testing.T) {

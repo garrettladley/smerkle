@@ -1,3 +1,6 @@
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+LDFLAGS := -X main.version=$(VERSION)
+
 ## help: print this help message
 .PHONY: help
 help:
@@ -34,3 +37,9 @@ fmt:
 .PHONY: lint
 lint:
 	@golangci-lint run
+
+## build: build the smerkle binary
+.PHONY: build
+build:
+	@mkdir -p bin
+	go build -ldflags "$(LDFLAGS)" -o bin/smerkle ./cmd

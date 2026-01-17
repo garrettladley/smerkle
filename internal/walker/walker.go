@@ -22,7 +22,10 @@ var (
 	ErrRootNotExist     = errors.New("walker: root does not exist")
 )
 
-const smerkleignoreFile = ".smerkleignore"
+const (
+	smerkleignoreFile = ".smerkleignore"
+	smerkleDir        = ".smerkle"
+)
 
 // entryResult holds the result of processing a single directory entry.
 type entryResult struct {
@@ -122,7 +125,7 @@ func (w *walker) walkDir(ctx context.Context, absDir, relDir string) (object.Has
 		return object.ZeroHash, fmt.Errorf("read dir: %w", err)
 	}
 
-	// build work items, filtering out .smerkleignore
+	// build work items, filtering out .smerkleignore and .smerkle
 	type workItem struct {
 		name    string
 		relPath string
@@ -131,7 +134,7 @@ func (w *walker) walkDir(ctx context.Context, absDir, relDir string) (object.Has
 	workItems := make([]workItem, 0, len(dirEntries))
 	for _, de := range dirEntries {
 		name := de.Name()
-		if name == smerkleignoreFile {
+		if name == smerkleignoreFile || name == smerkleDir {
 			continue
 		}
 		relPath := name
